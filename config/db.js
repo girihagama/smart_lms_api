@@ -2,7 +2,7 @@ const mysql = require('mysql2');
 const admin = require('firebase-admin');
 
 // Initialize Firebase Admin SDK
-const serviceAccount = require('./firebase-service-account.json');
+const serviceAccount = require('./path/to/your/serviceAccountKey.json'); // Replace with your service account key path
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
