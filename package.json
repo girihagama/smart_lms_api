@@ -5,7 +5,8 @@
   "main": "app.js",
   "scripts": {
     "dev": "nodemon app.js",
-    "start": "node app.js"
+    "start": "node app.js",
+    "build": "babel . --out-dir dist"
   },
   "keywords": [],
   "author": "Indunil Girihagama",

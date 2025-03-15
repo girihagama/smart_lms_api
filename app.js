@@ -1,40 +1,99 @@
+// Import required modules
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const mysql = require('mysql2/promise');
+const admin = require('firebase-admin');
+const path = require('path');
+const fs = require('fs');
 
+// Route imports for different functionalities of the app
+const rootRoutes = require('./routes/rootRoutes');
 const userRoutes = require('./routes/userRoutes');
 const bookRoutes = require('./routes/bookRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 
 const app = express();
+
+// Middleware setup for CORS and parsing JSON request bodies
 app.use(cors());
 app.use(bodyParser.json());
 
-app.use('/users', userRoutes);
-app.use('/books', bookRoutes);
-app.use('/transactions', transactionRoutes);
+// Path to the Firebase service account credentials
+const serviceAccount = path.join(__dirname, './firebase-service-account.json');
 
-const db = require('./config/db');
+// Initialize Firebase Admin SDK with the service account credentials
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+});
+console.log("Firebase initialized successfully");
 
-// Function to check if database connection is established
-function isDatabaseConnected() {
-  return new Promise((resolve, reject) => {
-    if (db().state === 'disconnected') {
-      setTimeout(() => {
-        isDatabaseConnected().then(resolve).catch(reject); // Recursive call
-      }, 1000); // Check every 1 second
-    } else {
-      resolve();
+// Function to fetch database configuration from Firebase Remote Config
+const getDatabaseConfig = async () => {
+    try {
+        // Fetching the remote config from Firebase
+        const remoteConfig = await admin.remoteConfig().getTemplate();
+
+        // Parsing the database configuration from the fetched remote config
+        let databaseConfig = remoteConfig.parameters.REMOTE_CONFIG.defaultValue.value;
+        databaseConfig = JSON.parse(databaseConfig).db_config;
+
+        // Returning the parsed database config
+        return databaseConfig;
+    } catch (error) {
+        // Log error if fetching remote config fails
+        console.error("Error fetching remote config:", error);
+        return null;  // Return null if there's an error
     }
-  });
-}
+};
 
-// Start server after database connection is established
-isDatabaseConnected()
-  .then(() => {
-    const port = 3000;
-    app.listen(port, () => console.log(`Server running on port ${port}`));
-  })
-  .catch((err) => {
-    console.error('Failed to start server:', err);
-  });
+// Initialize MySQL connection after fetching database configuration and then start the server
+let db = null;
+
+// Self-executing async function to handle database initialization and server startup
+(async () => {
+    // Fetch the database config
+    const dbConfig = await getDatabaseConfig();
+    
+    // If no config is fetched, exit the process
+    if (!dbConfig) {
+        console.error("Failed to fetch database config. Exiting...");
+        process.exit(1); // Exit with failure status code
+    }
+
+    try {
+        // Create a MySQL connection pool with the fetched database config
+        db = mysql.createPool({
+            host: dbConfig.host,
+            user: dbConfig.user,
+            password: dbConfig.password,
+            database: dbConfig.database
+        });
+
+        // Test the connection by trying to get a connection from the pool
+        await db.getConnection(); // This ensures that the connection works
+        console.log("Database initialized successfully");
+
+        // Define and use the application routes
+        app.use('/', rootRoutes);            // Root routes for the app
+        app.use('/user', userRoutes);        // Routes related to user operations
+        app.use('/book', bookRoutes);        // Routes related to book operations
+        app.use('/transaction', transactionRoutes); // Routes for transaction management
+
+        // Handle 404 errors for any other undefined routes
+        app.use((req, res, next) => {
+            res.status(404).json({
+                message: "Route not found. Please check the URL and try again."
+            });
+        });
+
+        // Start the server on the specified port
+        const PORT = process.env.PORT || 8080; // Use environment variable or fallback to 8080
+        app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+    } catch (error) {
+        // Handle errors in database connection or initialization
+        console.error("Failed to initialize or connect to the database:", error);
+        process.exit(1); // Exit the process with failure if database initialization fails
+    }
+})();
