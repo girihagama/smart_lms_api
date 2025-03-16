@@ -1,21 +1,38 @@
+// middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = 'TSD_GROUP06_SMARTLMS';
+// Middleware to authenticate JWT token
+const authenticateJWT = (req, res, next) => {
+    const authHeader = req.headers.authorization;
 
-exports.authenticateToken = (req, res, next) => {
-    const token = req.headers['authorization'];
-    if (!token) return res.status(401).json({ error: 'Access denied' });
+    if (authHeader) {
+        const token = authHeader.split(' ')[1];
 
-    jwt.verify(token.split(' ')[1], JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ error: 'Invalid token' });
-        req.user = user; // Attach user info to request object
-        next();
-    });
+        jwt.verify(token, req.app.locals.jwt_secret, (err, user) => {
+            if (err) {
+                return res.sendStatus(403); // Forbidden
+            }
+
+            req.user = user;  // Add user information to the request
+            next();
+        });
+    } else {
+        res.sendStatus(401); // Unauthorized
+    }
 };
 
-exports.authorizeRole = (role) => (req, res, next) => {
-    if (req.user.role !== role) {
-        return res.status(403).json({ error: 'Forbidden: Insufficient privileges' });
-    }
-    next();
+// Middleware to authorize user role
+const authorizeRole = (roles) => {
+    return (req, res, next) => {
+        if (req.user && roles.includes(req.user.user_role)) {
+            next();  // User has the required role, proceed
+        } else {
+            res.sendStatus(403);  // Forbidden
+        }
+    };
+};
+
+module.exports = {
+    authenticateJWT,
+    authorizeRole
 };
