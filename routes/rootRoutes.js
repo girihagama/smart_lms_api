@@ -43,7 +43,7 @@ router.post('/token', async (req, res) => {
         // 4. Generate a JWT token with the user's email and role
         const payload = {
             user_email: user.user_email,  // Include user's email
-            user_role: user.user_role     // Include user's role (e.g., admin, user)
+            user_role: user.user_role     // Include user's role
         };
         const token = jwt.sign(payload, req.app.locals.jwt_secret, { expiresIn: '1h' });
 
