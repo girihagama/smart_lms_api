@@ -153,4 +153,36 @@ router.post('/add', authorizeRole(['Member','Librarian']), upload.single('book_i
     }
 });
 
+//get list of books that are currently borrowed by a member
+router.post('/borrowed', authorizeRole(['Member']), async (req, res) => {
+    try {
+        const { user_id } = req.body; // Get the user_id from the request body
+
+        if (!user_id) {
+            return res.status(400).json({ message: 'User ID is required' });
+        }
+
+        // Query to fetch borrowed books by a specific user
+        const [borrowedBooks] = await req.app.locals.db.query(
+            'SELECT * FROM transaction WHERE user_id = ? AND transaction_status = ?',
+            [user_id, '1']
+        );
+
+        if (borrowedBooks.length === 0) {
+            return res.status(404).json({ message: 'No borrowed books found for the user' });
+        }
+
+        res.status(200).json({
+            message: 'Borrowed books retrieved successfully',
+            data: borrowedBooks,
+        });
+    } catch (error) {
+        console.error('Error fetching borrowed books:', error);
+
+        if (!res.headersSent) {
+            res.status(500).json({ message: 'Internal Server Error' });
+        }
+    }
+});
+
 module.exports = router;
