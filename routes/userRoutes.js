@@ -17,4 +17,10 @@ router.get('/',authorizeRole(['Member', 'Librarian']), (req, res) => {
     }
 });
 
+//endpoint to register a new member through the librarian dashboard
+router.post('/register/member',authorizeRole(['Librarian']), async (req, res) => {
+});
+
+
+
 module.exports = router;

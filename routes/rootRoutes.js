@@ -57,4 +57,8 @@ router.post('/token', async (req, res) => {
     }
 });
 
+//endpoint to activate member through email link
+router.post('/activate/account', async (req, res) => {
+});
+
 module.exports = router;

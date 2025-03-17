@@ -12,13 +12,18 @@ const rootRoutes = require('./routes/rootRoutes');
 const userRoutes = require('./routes/userRoutes');
 const bookRoutes = require('./routes/bookRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
-const { authenticateJWT } = require('./middleware/auth'); // Import middlewares
+
+// Import middlewares
+const { authenticateJWT } = require('./middleware/auth');
+const upload = require('./middleware/multer');
 
 const app = express();
-
 // Middleware setup for CORS and parsing JSON request bodies
 app.use(cors());
 app.use(bodyParser.json());
+
+//serve static file
+app.use('/uploads', express.static('uploads'));
 
 // Path to the Firebase service account credentials
 const serviceAccount = path.join(__dirname, './firebase-service-account.json');
