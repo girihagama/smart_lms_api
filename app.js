@@ -13,11 +13,17 @@ const userRoutes = require('./routes/userRoutes');
 const bookRoutes = require('./routes/bookRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 
-const app = express();
+// Import middlewares
+const { authenticateJWT } = require('./middleware/auth');
+const upload = require('./middleware/multer');
 
+const app = express();
 // Middleware setup for CORS and parsing JSON request bodies
 app.use(cors());
 app.use(bodyParser.json());
+
+//serve static file
+app.use('/uploads', express.static('uploads'));
 
 // Path to the Firebase service account credentials
 const serviceAccount = path.join(__dirname, './firebase-service-account.json');
@@ -29,17 +35,17 @@ admin.initializeApp({
 console.log("Firebase initialized successfully");
 
 // Function to fetch database configuration from Firebase Remote Config
-const getDatabaseConfig = async () => {
+const getRemoteConfig = async () => {
     try {
         // Fetching the remote config from Firebase
         const remoteConfig = await admin.remoteConfig().getTemplate();
 
         // Parsing the database configuration from the fetched remote config
-        let databaseConfig = remoteConfig.parameters.REMOTE_CONFIG.defaultValue.value;
-        databaseConfig = JSON.parse(databaseConfig).db_config;
+        let fbRemConfig = remoteConfig.parameters.REMOTE_CONFIG.defaultValue.value;
+        fbRemConfig = JSON.parse(fbRemConfig);
 
-        // Returning the parsed database config
-        return databaseConfig;
+        // Returning the parsed fbRem config
+        return fbRemConfig;
     } catch (error) {
         // Log error if fetching remote config fails
         console.error("Error fetching remote config:", error);
@@ -53,7 +59,9 @@ let db = null;
 // Self-executing async function to handle database initialization and server startup
 (async () => {
     // Fetch the database config
-    const dbConfig = await getDatabaseConfig();
+    const remConfig = await getRemoteConfig().then((config) => {return config;});
+    const dbConfig = remConfig.db_config;
+    const jwtSecret = remConfig.jwt_secret;
     
     // If no config is fetched, exit the process
     if (!dbConfig) {
@@ -74,11 +82,22 @@ let db = null;
         await db.getConnection(); // This ensures that the connection works
         console.log("Database initialized successfully");
 
+        // Middleware to attach db to request object
+        app.use((req, res, next) => {
+          req.app.locals.db = db;
+          next();
+        });
+        // Middleware to attach jwt secret to request object
+        app.use((req, res, next) => {
+          req.app.locals.jwt_secret = jwtSecret;
+          next();
+        });
+
         // Define and use the application routes
         app.use('/', rootRoutes);            // Root routes for the app
-        app.use('/user', userRoutes);        // Routes related to user operations
-        app.use('/book', bookRoutes);        // Routes related to book operations
-        app.use('/transaction', transactionRoutes); // Routes for transaction management
+        app.use('/user',authenticateJWT, userRoutes);        // Routes related to user operations
+        app.use('/book',authenticateJWT, bookRoutes);        // Routes related to book operations
+        app.use('/transaction',authenticateJWT, transactionRoutes); // Routes for transaction management
 
         // Handle 404 errors for any other undefined routes
         app.use((req, res, next) => {

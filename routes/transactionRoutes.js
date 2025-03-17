@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
-router.get('/', (req, res) => {
+const { authorizeRole } = require('../middleware/auth'); // Import middlewares
+
+router.get('/',authorizeRole(['Member', 'Librarian']), (req, res) => {
     // Ensure no other response is sent before returning
     try {
         // Some logic

@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
-router.get('/', (req, res) => {
+const { authorizeRole } = require('../middleware/auth'); // Import middlewares
+
+router.get('/',authorizeRole(['Member', 'Librarian']), (req, res) => {
     // Ensure no other response is sent before returning
     try {
         // Some logic
@@ -14,5 +16,11 @@ router.get('/', (req, res) => {
         }
     }
 });
+
+//endpoint to register a new member through the librarian dashboard
+router.post('/register/member',authorizeRole(['Librarian']), async (req, res) => {
+});
+
+
 
 module.exports = router;
