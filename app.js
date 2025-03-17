@@ -30,27 +30,27 @@ const serviceAccount = path.join(__dirname, './firebase-service-account.json');
 
 // Initialize Firebase Admin SDK with the service account credentials
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+  credential: admin.credential.cert(serviceAccount),
 });
-console.log("Firebase initialized successfully");
+console.log('Firebase initialized successfully');
 
 // Function to fetch database configuration from Firebase Remote Config
 const getRemoteConfig = async () => {
-    try {
-        // Fetching the remote config from Firebase
-        const remoteConfig = await admin.remoteConfig().getTemplate();
+  try {
+    // Fetching the remote config from Firebase
+    const remoteConfig = await admin.remoteConfig().getTemplate();
 
-        // Parsing the database configuration from the fetched remote config
-        let fbRemConfig = remoteConfig.parameters.REMOTE_CONFIG.defaultValue.value;
-        fbRemConfig = JSON.parse(fbRemConfig);
+    // Parsing the database configuration from the fetched remote config
+    let fbRemConfig = remoteConfig.parameters.REMOTE_CONFIG.defaultValue.value;
+    fbRemConfig = JSON.parse(fbRemConfig);
 
-        // Returning the parsed fbRem config
-        return fbRemConfig;
-    } catch (error) {
-        // Log error if fetching remote config fails
-        console.error("Error fetching remote config:", error);
-        return null;  // Return null if there's an error
-    }
+    // Returning the parsed fbRem config
+    return fbRemConfig;
+  } catch (error) {
+    // Log error if fetching remote config fails
+    console.error('Error fetching remote config:', error);
+    return null; // Return null if there's an error
+  }
 };
 
 // Initialize MySQL connection after fetching database configuration and then start the server
@@ -58,61 +58,62 @@ let db = null;
 
 // Self-executing async function to handle database initialization and server startup
 (async () => {
-    // Fetch the database config
-    const remConfig = await getRemoteConfig().then((config) => {return config;});
-    const dbConfig = remConfig.db_config;
-    const jwtSecret = remConfig.jwt_secret;
-    
-    // If no config is fetched, exit the process
-    if (!dbConfig) {
-        console.error("Failed to fetch database config. Exiting...");
-        process.exit(1); // Exit with failure status code
-    }
+  // Fetch the database config
+  const remConfig = await getRemoteConfig().then((config) => {
+    return config;
+  });
+  const dbConfig = remConfig.db_config;
+  const jwtSecret = remConfig.jwt_secret;
 
-    try {
-        // Create a MySQL connection pool with the fetched database config
-        db = mysql.createPool({
-            host: dbConfig.host,
-            user: dbConfig.user,
-            password: dbConfig.password,
-            database: dbConfig.database
-        });
+  // If no config is fetched, exit the process
+  if (!dbConfig) {
+    console.error('Failed to fetch database config. Exiting...');
+    process.exit(1); // Exit with failure status code
+  }
 
-        // Test the connection by trying to get a connection from the pool
-        await db.getConnection(); // This ensures that the connection works
-        console.log("Database initialized successfully");
+  try {
+    // Create a MySQL connection pool with the fetched database config
+    db = mysql.createPool({
+      host: dbConfig.host,
+      user: dbConfig.user,
+      password: dbConfig.password,
+      database: dbConfig.database,
+    });
 
-        // Middleware to attach db to request object
-        app.use((req, res, next) => {
-          req.app.locals.db = db;
-          next();
-        });
-        // Middleware to attach jwt secret to request object
-        app.use((req, res, next) => {
-          req.app.locals.jwt_secret = jwtSecret;
-          next();
-        });
+    // Test the connection by trying to get a connection from the pool
+    await db.getConnection(); // This ensures that the connection works
+    console.log('Database initialized successfully');
 
-        // Define and use the application routes
-        app.use('/', rootRoutes);            // Root routes for the app
-        app.use('/user',authenticateJWT, userRoutes);        // Routes related to user operations
-        app.use('/book',authenticateJWT, bookRoutes);        // Routes related to book operations
-        app.use('/transaction',authenticateJWT, transactionRoutes); // Routes for transaction management
+    // Middleware to attach db to request object
+    app.use((req, res, next) => {
+      req.app.locals.db = db;
+      next();
+    });
+    // Middleware to attach jwt secret to request object
+    app.use((req, res, next) => {
+      req.app.locals.jwt_secret = jwtSecret;
+      next();
+    });
 
-        // Handle 404 errors for any other undefined routes
-        app.use((req, res, next) => {
-            res.status(404).json({
-                message: "Route not found. Please check the URL and try again."
-            });
-        });
+    // Define and use the application routes
+    app.use('/', rootRoutes); // Root routes for the app
+    app.use('/user', authenticateJWT, userRoutes); // Routes related to user operations
+    app.use('/book', authenticateJWT, bookRoutes); // Routes related to book operations
+    app.use('/transaction', authenticateJWT, transactionRoutes); // Routes for transaction management
 
-        // Start the server on the specified port
-        const PORT = process.env.PORT || 8080; // Use environment variable or fallback to 8080
-        app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    // Handle 404 errors for any other undefined routes
+    app.use((req, res, next) => {
+      res.status(404).json({
+        message: 'Route not found. Please check the URL and try again.',
+      });
+    });
 
-    } catch (error) {
-        // Handle errors in database connection or initialization
-        console.error("Failed to initialize or connect to the database:", error);
-        process.exit(1); // Exit the process with failure if database initialization fails
-    }
+    // Start the server on the specified port
+    const PORT = process.env.PORT || 8090; // Use environment variable or fallback to 8080
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  } catch (error) {
+    // Handle errors in database connection or initialization
+    console.error('Failed to initialize or connect to the database:', error);
+    process.exit(1); // Exit the process with failure if database initialization fails
+  }
 })();
