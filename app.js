@@ -115,8 +115,8 @@ let db = null;
       });
     });
 
-    // Function to be executed by the cron job
-    const automatedTask = () => {
+    // update due fees of transactions
+    const updateDue = () => {
       console.log("🕒 Function executed at", new Date().toLocaleString());
 
       // update due fees of transactions
@@ -129,8 +129,14 @@ let db = null;
         });
     };
 
+    // send return push notification and email
+    const sendDueNotification = () => {
+      console.log("🕒 Function executed at", new Date().toLocaleString());
+    };
+
     //cron.schedule('0 0,6,12,18 * * *', automatedTask); // Schedule the cron job to run every 6 hours
-    cron.schedule('* * * * *', automatedTask); // Schedule the cron job to run every 1 min
+    cron.schedule('0 6,12,18 * * *', sendDueNotification); // Schedule the cron job to run at 6,12,18 hours
+    cron.schedule('* * * * *', updateDue); // Schedule the cron job to run every 1 min
     console.log('✅ Cron jobs scheduled!');
 
     // Start the server on the specified port
