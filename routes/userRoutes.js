@@ -203,5 +203,30 @@ router.post('/info', authorizeRole(['Member', 'Librarian']), async (req, res) =>
   }
 });
 
+router.post('/device', authorizeRole(['Member']), async (req, res) => {
+    const email = req.user.user_email;
+    const { device_id } = req.body; // Get the email and device_id from the request body
+
+    if (!email || !device_id) {
+        return res.status(400).json({ action: false, message: 'Device ID are required' });
+    }
+
+    //update user device id
+    try {      
+        // Update the user's device ID
+        await req.app.locals.db.query('UPDATE user SET user_device_id = ? WHERE user_email = ?', [
+            device_id,
+            email,
+        ]);
+
+        res.json({ action: true, message: 'Device ID updated successfully' });
+    } catch (error) {
+        console.error('Error updating device ID:', error);
+
+        if (!res.headersSent) {
+            res.status(500).json({ action: false, message: 'Internal Server Error' });
+        }
+    }
+});
 
 module.exports = router;
