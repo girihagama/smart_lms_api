@@ -84,6 +84,12 @@ let db = null;
     await db.getConnection(); // This ensures that the connection works
     console.log('Database initialized successfully');
 
+    // Middleware to attach firebase config to request
+    app.use((req, res, next) => {
+      req.app.locals.fbrc = remConfig;
+      next();
+    });
+
     // Middleware to attach db to request object
     app.use((req, res, next) => {
       req.app.locals.db = db;
