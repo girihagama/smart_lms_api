@@ -187,13 +187,7 @@ router.post('/check', authorizeRole(['Member', 'Librarian']), async (req, res) =
       [book_id, 'issued', 'due']
     );
 
-    if (borrowedBook.length > 0) {
-      return res
-        .status(400)
-        .json({ action: false, message: 'Book is not available for borrowing' });
-    }
-
-    res.status(200).json({ action: true, message: 'Book is available for borrowing', book });
+    res.status(200).json({ action: true, message: 'Book is available for borrowing', book , available: borrowedBook.length === 0 });
   } catch (error) {
     console.error('Error checking the book:', error);
 

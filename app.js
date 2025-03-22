@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
 const admin = require('firebase-admin');
+const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
 
@@ -113,6 +114,24 @@ let db = null;
         message: 'Route not found. Please check the URL and try again.',
       });
     });
+
+    // Function to be executed by the cron job
+    const automatedTask = () => {
+      console.log("🕒 Function executed at", new Date().toLocaleString());
+
+      // update due fees of transactions
+      db.query('UPDATE transaction SET transaction_late_days = DATEDIFF(NOW(), transaction_return_date), transaction_late_payments = transaction_late_fee * DATEDIFF(NOW(), transaction_return_date) WHERE transaction_status = ? AND transaction_return_date < NOW()', ['due'])
+        .then(() => {
+          console.log('Late fees updated successfully!');
+        })
+        .catch((error) => {
+          console.error('Error updating late fees:', error);
+        });
+    };
+
+    //cron.schedule('0 0,6,12,18 * * *', automatedTask); // Schedule the cron job to run every 6 hours
+    cron.schedule('* * * * *', automatedTask); // Schedule the cron job to run every 1 min
+    console.log('✅ Cron jobs scheduled!');
 
     // Start the server on the specified port
     const PORT = process.env.PORT || 8090; // Use environment variable or fallback to 8080
