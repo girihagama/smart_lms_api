@@ -38,6 +38,7 @@ router.post('/list', authorizeRole(['Member', 'Librarian']), async (req, res) =>
     ]);
 
     res.status(200).json({
+      action: true,
       message: 'Books retrieved successfully',
       data: books,
     });
@@ -45,7 +46,7 @@ router.post('/list', authorizeRole(['Member', 'Librarian']), async (req, res) =>
     console.error('Error fetching books:', error);
 
     if (!res.headersSent) {
-      res.status(500).json({ message: 'Internal Server Error' });
+      res.status(500).json({ action: false, message: 'Internal Server Error' });
     }
   }
 });
@@ -160,34 +161,44 @@ router.post(
   }
 );
 
-//get list of books that are currently borrowed by a member
-router.post('/borrowed', authorizeRole(['Member']), async (req, res) => {
+//check if book is available for borrowing
+router.post('/check', authorizeRole(['Member', 'Librarian']), async (req, res) => {
   try {
-    const { user_id } = req.body; // Get the user_id from the request body
+    const { book_id } = req.body; // Get the book_id from the request body
 
-    if (!user_id) {
-      return res.status(400).json({ message: 'User ID is required' });
+    if (!book_id) {
+      return res.status(400).json({ action: false, message: 'Book ID is required' });
     }
 
-    // Query to fetch borrowed books by a specific user
-    const [borrowedBooks] = await req.app.locals.db.query(
-      'SELECT * FROM transaction WHERE user_id = ? AND transaction_status = ?',
-      [user_id, '1']
+    // Query to check if the book is available for borrowing
+    const [book] = await req.app.locals.db.query('SELECT * FROM book WHERE book_id = ?', [book_id]);
+
+    if (book.length === 0) {
+      return res.status(404).json({ action: false, message: 'Book not found' });
+    } else if (book[0].book_status === '0') {
+      return res
+        .status(400)
+        .json({ action: false, message: 'Book is not available for borrowing' });
+    }
+
+    //check if the book is currently borrowed
+    const [borrowedBook] = await req.app.locals.db.query(
+      'SELECT * FROM transaction WHERE transaction_book_id = ? AND transaction_status = ? OR transaction_status = ?',
+      [book_id, 'issued', 'due']
     );
 
-    if (borrowedBooks.length === 0) {
-      return res.status(404).json({ message: 'No borrowed books found for the user' });
+    if (borrowedBook.length > 0) {
+      return res
+        .status(400)
+        .json({ action: false, message: 'Book is not available for borrowing' });
     }
 
-    res.status(200).json({
-      message: 'Borrowed books retrieved successfully',
-      data: borrowedBooks,
-    });
+    res.status(200).json({ action: true, message: 'Book is available for borrowing', book });
   } catch (error) {
-    console.error('Error fetching borrowed books:', error);
+    console.error('Error checking the book:', error);
 
     if (!res.headersSent) {
-      res.status(500).json({ message: 'Internal Server Error' });
+      res.status(500).json({ action: false, message: 'Internal Server Error' });
     }
   }
 });
