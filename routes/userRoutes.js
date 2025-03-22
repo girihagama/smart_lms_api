@@ -137,4 +137,71 @@ router.post('/register', authorizeRole(['Librarian']), async (req, res) => {
     res.status(500).json({ action: false, message: 'Server error' });
   }
 });
+
+//Account status change
+router.post('/status', authorizeRole(['Librarian']), async (req, res) => {
+  try {
+    const { email, status } = req.body;
+
+    // Check if all required fields are present
+    if (!email || !status) {
+      return res.status(400).json({ action: false, message: 'All fields are required' });
+    }
+
+    // Check if user exists
+    const [existingUser] = await req.app.locals.db.query(
+      'SELECT * FROM user WHERE user_email = ?',
+      [email]
+    );
+    if (existingUser.length === 0) {
+      return res.status(400).json({ action: false, message: 'User does not exist' });
+    }
+
+    // Update user status
+    await req.app.locals.db.query('UPDATE user SET user_status = ? WHERE user_email = ?', [
+      status,
+      email,
+    ]);
+
+    // Respond with success message
+    res.json({ action: true, message: 'User status updated successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ action: false, message: 'Server error' });
+  }
+});
+
+//get user information from database
+router.post('/info', authorizeRole(['Member', 'Librarian']), async (req, res) => {
+  try {
+    const { email } = req.body; // Get the email from the request body
+
+    if (!email) {
+      return res.status(400).json({ action: false, message: 'Email is required' });
+    }
+
+    // Query to fetch user information by email
+    const [userInfo] = await req.app.locals.db.query('SELECT * FROM user WHERE user_email = ?', [
+      email,
+    ]);
+
+    if (userInfo.length === 0) {
+      return res.status(404).json({ action: false, message: 'User not found' });
+    }
+
+    //delete sensitive information
+    delete userInfo[0].user_password;
+    delete userInfo[0].user_otp;
+    delete userInfo[0].user_otp_expire;
+    res.json({action: true, message: 'User found', user: userInfo[0]});    
+  } catch (error) {
+    console.error('Error fetching user information:', error);
+
+    if (!res.headersSent) {
+      res.status(500).json({ action: false, message: 'Internal Server Error' });
+    }
+  }
+});
+
+
 module.exports = router;
