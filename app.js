@@ -85,9 +85,13 @@ let db = null;
     await db.getConnection(); // This ensures that the connection works
     console.log('Database initialized successfully');
 
-    // Middleware to attach firebase config to request
+    // Middleware to attach firebase
     app.use((req, res, next) => {
       req.app.locals.fbrc = remConfig;
+      next();
+    });
+    app.use((req, res, next) => {
+      req.app.locals.firebaseadmin = admin;
       next();
     });
 
@@ -118,6 +122,14 @@ let db = null;
     // update due fees of transactions
     const updateDue = () => {
       console.log("🕒 Function executed at", new Date().toLocaleString());
+      //set due status to transactions
+      db.query('UPDATE transaction SET transaction_status = ?, transaction_late_days = DATEDIFF(NOW(), transaction_return_date), transaction_late_payments = transaction_late_fee * DATEDIFF(NOW(), transaction_return_date) WHERE transaction_status = ? AND transaction_return_date < NOW()', ['Due', 'issued'])
+        .then(() => {
+          console.log('Transaction status updated successfully!');
+        })
+        .catch((error) => {
+          console.error('Error updating transactions:', error);
+        });
 
       // update due fees of transactions
       db.query('UPDATE transaction SET transaction_late_days = DATEDIFF(NOW(), transaction_return_date), transaction_late_payments = transaction_late_fee * DATEDIFF(NOW(), transaction_return_date) WHERE transaction_status = ? AND transaction_return_date < NOW()', ['due'])
@@ -132,6 +144,7 @@ let db = null;
     // send return push notification and email
     const sendDueNotification = () => {
       console.log("🕒 Function executed at", new Date().toLocaleString());
+      // Send firebase cloud message to everyone who has due and remaining days are less than 3
     };
 
     //cron.schedule('0 0,6,12,18 * * *', automatedTask); // Schedule the cron job to run every 6 hours
