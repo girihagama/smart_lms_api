@@ -233,6 +233,13 @@ router.post('/history', authorizeRole(['Member', 'Librarian' ]), async (req, res
       [user_id, 'returned', limit, (page - 1) * limit]
     );
 
+    // Modify the results to include a concatenated field
+    const formattedBooks = borrowedBooks.map(book => ({
+      ...book,
+      book_image: req.app.locals.fbrc.api_base_url + book.book_image.replace(/\\/g, '/'),
+      transaction_return: 'return ' + dayjs(book.transaction_return_date).fromNow(),
+    }));
+
     if (borrowedBooks.length === 0) {
       return res.status(404).json({
         action: false,
@@ -250,7 +257,7 @@ router.post('/history', authorizeRole(['Member', 'Librarian' ]), async (req, res
     res.status(200).json({
       action: true,
       message: 'Borrowed books retrieved successfully',
-      data: borrowedBooks,
+      data: formattedBooks,
       pagination: {
         total: totalBooks[0].total,
         limit: limit,
@@ -328,6 +335,13 @@ router.post('/fined', authorizeRole(['Member','Librarian']), async (req, res) =>
         'SELECT * FROM transaction JOIN book ON transaction.transaction_book_id = book.book_id WHERE transaction_user_email = ? AND (transaction_status = ? OR transaction_status = ?) AND transaction_late_days > 0 ORDER BY transaction_borrow_date DESC LIMIT ? OFFSET ?',
         [user_id, 'returned', 'due', limit, (page - 1) * limit]
       );
+
+      // Modify the results to include a concatenated field
+      const formattedBooks = finedBooks.map(book => ({
+        ...book,
+        book_image: req.app.locals.fbrc.api_base_url + book.book_image.replace(/\\/g, '/'),
+        transaction_return: 'return ' + dayjs(book.transaction_return_date).fromNow(),
+      }));
   
       if (finedBooks.length === 0) {
         return res.status(404).json({
@@ -346,7 +360,7 @@ router.post('/fined', authorizeRole(['Member','Librarian']), async (req, res) =>
       res.status(200).json({
         action: true,
         message: 'Fined books retrieved successfully',
-        data: finedBooks,
+        data: formattedBooks,
         pagination: {
           total: totalBooks[0].total,
           limit: limit,
