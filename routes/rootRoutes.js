@@ -7,7 +7,13 @@ const router = express.Router();
 
 router.get('/', (req, res) => {
   try {
-    res.status(200).json({ message: 'Service is up and running successfully!', firebase: !!req.app.locals.fbrc, database : !!req.app.locals.db });
+    res
+      .status(200)
+      .json({
+        message: 'Service is up and running successfully!',
+        firebase: !!req.app.locals.fbrc,
+        database: !!req.app.locals.db,
+      });
   } catch (error) {
     console.error('Error:', error);
     if (!res.headersSent) {
@@ -45,6 +51,7 @@ router.post('/token', async (req, res) => {
     const payload = {
       user_email: user.user_email, // Include user's email
       user_role: user.user_role, // Include user's role
+      user_name: user.user_name,
     };
     const token = jwt.sign(payload, req.app.locals.jwt_secret, { expiresIn: '30d' });
 
@@ -167,7 +174,7 @@ router.post('/forget/:email', async (req, res) => {
 
     // Fetch email config from Firebase Remote Config
     const { host, port, username, password } = req.app.locals.fbrc.email_config;
-    
+
     const transporter = nodemailer.createTransport({
       host: host,
       port: parseInt(port),

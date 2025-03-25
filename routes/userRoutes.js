@@ -208,7 +208,7 @@ router.post('/device', authorizeRole(['Member']), async (req, res) => {
     const { device_id } = req.body; // Get the email and device_id from the request body
 
     if (!email || !device_id) {
-        return res.status(400).json({ action: false, message: 'Device ID are required' });
+        return res.status(400).json({ action: false, message: 'Device ID is required' });
     }
 
     //update user device id
