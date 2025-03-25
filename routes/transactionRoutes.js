@@ -30,12 +30,12 @@ router.post('/borrow', authorizeRole(['Member']), async (req, res) => {
     const { book_id } = req.body; // Get the user_email and book_id from the request body
 
     if (!user_email || !book_id) {
-      return res.status(400).json({ message: 'User ID and Book ID are required' });
+      return res.status(400).json({ action: false, message: 'User ID and Book ID are required' });
     }
 
     // Check if the user already has the maximum number of books borrowed
     const [borrowedBooks] = await req.app.locals.db.query(
-      'SELECT * FROM transaction WHERE transaction_user_email = ? AND transaction_status = ? OR transaction_status = ?',
+      'SELECT * FROM transaction WHERE transaction_user_email = ? AND (transaction_status = ? OR transaction_status = ?)',
       [user_email, 'issued', 'due']
     );
 
@@ -47,7 +47,7 @@ router.post('/borrow', authorizeRole(['Member']), async (req, res) => {
     if (borrowedBooks.length >= borrowLimit[0].user_max_books) {
       return res
         .status(400)
-        .json({ message: 'User has already borrowed the maximum number of books' });
+        .json({ action: false, message: 'User has already borrowed the maximum number of books' });
     }
 
     // Check if the book is available for borrowing
@@ -59,9 +59,9 @@ router.post('/borrow', authorizeRole(['Member']), async (req, res) => {
 
     // Check if the book exists
     if (book.length === 0) {
-      return res.status(404).json({ message: 'Book not found' });
+      return res.status(404).json({ action: false, message: 'Book not found' });
     } else if (book[0].book_status === '0') {
-      return res.status(400).json({ message: 'Book is inactive' });
+      return res.status(400).json({ action: false, message: 'Book is inactive' });
     }
 
     //check if the book is already borrowed
@@ -71,7 +71,7 @@ router.post('/borrow', authorizeRole(['Member']), async (req, res) => {
     );
 
     if (bookAvailablility.length > 0) {
-      return res.status(400).json({ message: 'Book is not available to borrow' });
+      return res.status(400).json({ action: false, message: 'Book is not available to borrow' });
     }
 
     //generate borrow date
@@ -87,9 +87,10 @@ router.post('/borrow', authorizeRole(['Member']), async (req, res) => {
     );
 
     //get user's name from the database
-    const [user] = await req.app.locals.db.query('SELECT user_name FROM user WHERE user_email = ?', [
-      user_email,
-    ]);
+    const [user] = await req.app.locals.db.query(
+      'SELECT user_name FROM user WHERE user_email = ?',
+      [user_email]
+    );
 
     // Prepare email content for the user
     const emailTemplate = `
@@ -160,12 +161,12 @@ router.post('/borrow', authorizeRole(['Member']), async (req, res) => {
     });
 
     // Send FCM notification
-    const [userFCMToken] = await req.app.locals.db.query(
+    /*     const [userFCMToken] = await req.app.locals.db.query(
       'SELECT user_device_id FROM user WHERE user_email = ?',
       [user_email]
-    );
+    ); */
 
-    if (userFCMToken.length > 0 && !userFCMToken[0].user_device_id) {
+    /* if (userFCMToken.length > 0 && !userFCMToken[0].user_device_id) {
       const message = {
         notification: {
           title: '📚 Book Borrowed Successfully',
@@ -178,7 +179,7 @@ router.post('/borrow', authorizeRole(['Member']), async (req, res) => {
 
       // Send the FCM notification
       await req.app.locals.firebaseadmin.messaging().send(message);
-    }
+    } */
 
     res.status(200).json({ message: 'Book borrowed successfully' });
 
@@ -219,7 +220,7 @@ router.post('/history', authorizeRole(['Member']), async (req, res) => {
     const { page = 1, limit = 10 } = req.body;
 
     if (!user_id) {
-      return res.status(400).json({ message: 'User ID is required' });
+      return res.status(400).json({ action: false, message: 'User ID is required' });
     }
 
     // Query to fetch borrowed books by a specific user join the book table
@@ -234,6 +235,7 @@ router.post('/history', authorizeRole(['Member']), async (req, res) => {
 
     if (borrowedBooks.length === 0) {
       return res.status(404).json({
+        action: false,
         message: ['No borrowed books found for the user'],
         data: [],
         pagination: {
@@ -246,6 +248,7 @@ router.post('/history', authorizeRole(['Member']), async (req, res) => {
     }
 
     res.status(200).json({
+      action: true,
       message: 'Borrowed books retrieved successfully',
       data: borrowedBooks,
       pagination: {
@@ -259,7 +262,7 @@ router.post('/history', authorizeRole(['Member']), async (req, res) => {
     console.error('Error fetching borrowed books:', error);
 
     if (!res.headersSent) {
-      res.status(500).json({ message: 'Internal Server Error' });
+      res.status(500).json({ action: false, message: 'Internal Server Error' });
     }
   }
 });
@@ -270,17 +273,17 @@ router.post('/borrowed', authorizeRole(['Member']), async (req, res) => {
     const user_id = req.user.user_email; // Get the user_id from the request body
 
     if (!user_id) {
-      return res.status(400).json({ message: 'User ID is required' });
+      return res.status(400).json({ action:false, message: 'User ID is required' });
     }
 
     // Query to fetch borrowed books by a specific user join the book table
     const [borrowedBooks] = await req.app.locals.db.query(
-      'SELECT * FROM transaction JOIN book ON transaction.transaction_book_id = book.book_id WHERE transaction_user_email = ? AND transaction_status = ? OR transaction_status = ?',
+      'SELECT * FROM transaction JOIN book ON transaction.transaction_book_id = book.book_id WHERE transaction_user_email = ? AND (transaction_status = ? OR transaction_status = ?)',
       [user_id, 'issued', 'due']
     );
 
     if (borrowedBooks.length === 0) {
-      return res.status(404).json({ message: ['No borrowed books found for the user'], data: [] });
+      return res.status(404).json({ action:false,message: ['No borrowed books found for the user'], data: [] });
     }
 
     // Map and assign the result
@@ -291,6 +294,7 @@ router.post('/borrowed', authorizeRole(['Member']), async (req, res) => {
     }));
 
     res.status(200).json({
+        action:true,
       message: 'Borrowed books retrieved successfully',
       data: updatedBooks,
     });
@@ -298,7 +302,7 @@ router.post('/borrowed', authorizeRole(['Member']), async (req, res) => {
     console.error('Error fetching borrowed books:', error);
 
     if (!res.headersSent) {
-      res.status(500).json({ message: 'Internal Server Error' });
+      res.status(500).json({ action:false,message: 'Internal Server Error' });
     }
   }
 });
@@ -310,7 +314,7 @@ router.post('/rate', authorizeRole(['Member']), async (req, res) => {
     const user_id = req.user.user_email;
 
     if (!transaction_id || !rating) {
-      return res.status(400).json({ message: 'Transaction ID and Rating are required' });
+      return res.status(400).json({ action:false,message: 'Transaction ID and Rating are required' });
     }
 
     // Check if the transaction exists
@@ -320,12 +324,12 @@ router.post('/rate', authorizeRole(['Member']), async (req, res) => {
     );
 
     if (transaction.length === 0) {
-      return res.status(404).json({ message: 'Transaction not found' });
+      return res.status(404).json({ action:false,message: 'Transaction not found' });
     }
 
     // Check if the transaction is already rated
     if (transaction[0].transaction_rating !== null) {
-      return res.status(400).json({ message: 'Transaction is already rated' });
+      return res.status(400).json({ action:false,message: 'Transaction is already rated' });
     }
 
     //rating cannot be added after 1month from return date
@@ -337,7 +341,7 @@ router.post('/rate', authorizeRole(['Member']), async (req, res) => {
     if (diffDays > 30) {
       return res
         .status(400)
-        .json({ message: 'Rating cannot be added after 30 days from return date' });
+        .json({ action:false,message: 'Rating cannot be added after 30 days from return date' });
     }
 
     // Update the transaction with the rating
@@ -346,12 +350,12 @@ router.post('/rate', authorizeRole(['Member']), async (req, res) => {
       [rating, transaction_id, user_id]
     );
 
-    res.status(200).json({ message: 'Transaction rated successfully' });
+    res.status(200).json({ action:true,message: 'Transaction rated successfully' });
   } catch (error) {
     console.error('Error rating transaction:', error);
 
     if (!res.headersSent) {
-      res.status(500).json({ message: 'Internal Server Error' });
+      res.status(500).json({ action:false,message: 'Internal Server Error' });
     }
   }
 });
