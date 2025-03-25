@@ -307,6 +307,61 @@ router.post('/borrowed', authorizeRole(['Member']), async (req, res) => {
   }
 });
 
+//get list of all books borrwed by the member
+router.post('/fined', authorizeRole(['Member']), async (req, res) => {
+    try {
+      const user_id = req.user.user_email;
+      //add page and limit
+      const { page = 1, limit = 10 } = req.body;
+  
+      if (!user_id) {
+        return res.status(400).json({ action: false, message: 'User ID is required' });
+      }
+  
+      // Query to fetch fined transaction by a specific user join the book table
+      const [totalBooks] = await req.app.locals.db.query(
+        'SELECT count(*) AS total FROM transaction JOIN book ON transaction.transaction_book_id = book.book_id WHERE transaction_user_email = ? AND (transaction_status = ? OR transaction_status = ?) AND transaction_late_days > 0 ORDER BY transaction_borrow_date DESC',
+        [user_id, 'returned', 'due']
+      );
+      const [finedBooks] = await req.app.locals.db.query(
+        'SELECT * FROM transaction JOIN book ON transaction.transaction_book_id = book.book_id WHERE transaction_user_email = ? AND (transaction_status = ? OR transaction_status = ?) AND transaction_late_days > 0 ORDER BY transaction_borrow_date DESC LIMIT ? OFFSET ?',
+        [user_id, 'returned', 'due', limit, (page - 1) * limit]
+      );
+  
+      if (finedBooks.length === 0) {
+        return res.status(404).json({
+          action: false,
+          message: ['No fined books found for the user'],
+          data: [],
+          pagination: {
+            total: totalBooks[0].total,
+            limit: limit,
+            page: page,
+            pages: Math.ceil(finedBooks.length / limit),
+          },
+        });
+      }
+  
+      res.status(200).json({
+        action: true,
+        message: 'Fined books retrieved successfully',
+        data: finedBooks,
+        pagination: {
+          total: totalBooks[0].total,
+          limit: limit,
+          page: page,
+          pages: Math.ceil(finedBooks.length / limit),
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching fined books:', error);
+  
+      if (!res.headersSent) {
+        res.status(500).json({ action: false, message: 'Internal Server Error' });
+      }
+    }
+  });
+
 //add transaction rating
 router.post('/rate', authorizeRole(['Member']), async (req, res) => {
   try {

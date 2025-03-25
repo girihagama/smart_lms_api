@@ -141,14 +141,26 @@ let db = null;
         });
     };
 
+    const updateFees = () => {
+      console.log("🕒 Function executed at", new Date().toLocaleString());
+      // update due fees of transactions
+      db.query('UPDATE transaction SET transaction_late_payments = transaction_late_fee * transaction_late_days WHERE transaction_late_days > 0')
+        .then(() => {
+          console.log('Late fees updated successfully!');
+        })
+        .catch((error) => {
+          console.error('Error updating late fees:', error);
+        });
+    };
+
     // send return push notification and email
     const sendDueNotification = () => {
       console.log("🕒 Function executed at", new Date().toLocaleString());
       // Send firebase cloud message to everyone who has due and remaining days are less than 3
     };
 
-    //cron.schedule('0 0,6,12,18 * * *', automatedTask); // Schedule the cron job to run every 6 hours
     cron.schedule('0 6,12,18 * * *', sendDueNotification); // Schedule the cron job to run at 6,12,18 hours
+    cron.schedule('0 6,12,18 * * *', updateFees); // Schedule the cron job to run at 6,12,18 hours
     cron.schedule('* * * * *', updateDue); // Schedule the cron job to run every 1 min
     console.log('✅ Cron jobs scheduled!');
 
