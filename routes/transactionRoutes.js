@@ -213,11 +213,11 @@ router.get('/return', authorizeRole(['Librarian']), (req, res) => {
 });
 
 //get list of all books borrwed by the member
-router.post('/history', authorizeRole(['Member']), async (req, res) => {
+router.post('/history', authorizeRole(['Member', 'Librarian' ]), async (req, res) => {
   try {
-    const user_id = req.user.user_email;
+    const user_email = req.user.user_email;
     //add page and limit
-    const { page = 1, limit = 10 } = req.body;
+    const { page = 1, limit = 10, user_id = user_email } = req.body;
 
     if (!user_id) {
       return res.status(400).json({ action: false, message: 'User ID is required' });
@@ -268,9 +268,10 @@ router.post('/history', authorizeRole(['Member']), async (req, res) => {
 });
 
 //get list of books that are currently borrowed by a member
-router.post('/borrowed', authorizeRole(['Member']), async (req, res) => {
+router.post('/borrowed', authorizeRole(['Member', 'Librarian']), async (req, res) => {
   try {
-    const user_id = req.user.user_email; // Get the user_id from the request body
+    const user_email = req.user.user_email;
+    const { user_id = user_email } = req.body;
 
     if (!user_id) {
       return res.status(400).json({ action:false, message: 'User ID is required' });
@@ -308,11 +309,11 @@ router.post('/borrowed', authorizeRole(['Member']), async (req, res) => {
 });
 
 //get list of all books borrwed by the member
-router.post('/fined', authorizeRole(['Member']), async (req, res) => {
+router.post('/fined', authorizeRole(['Member','Librarian']), async (req, res) => {
     try {
-      const user_id = req.user.user_email;
+      const user_email = req.user.user_email;
       //add page and limit
-      const { page = 1, limit = 10 } = req.body;
+      const { page = 1, limit = 10, user_id = user_email } = req.body;
   
       if (!user_id) {
         return res.status(400).json({ action: false, message: 'User ID is required' });

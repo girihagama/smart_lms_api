@@ -122,6 +122,7 @@ let db = null;
     // update due fees of transactions
     const updateDue = () => {
       console.log("🕒 Function executed at", new Date().toLocaleString());
+      updateFees();
       //set due status to transactions
       db.query('UPDATE transaction SET transaction_status = ?, transaction_late_days = DATEDIFF(NOW(), transaction_return_date), transaction_late_payments = transaction_late_fee * DATEDIFF(NOW(), transaction_return_date) WHERE transaction_status = ? AND transaction_return_date < NOW()', ['Due', 'issued'])
         .then(() => {
