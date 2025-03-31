@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon app.js",
     "start": "node app.js",
-    "build": "babel . --out-dir dist"
+    "build": "babel . --out-dir dist",
+    "test": "jest --coverage"
   },
   "keywords": [],
   "author": "Indunil Girihagama",
@@ -28,7 +29,8 @@
   },
   "devDependencies": {
     "jest": "^29.7.0",
+    "jest-mock": "^29.7.0",
     "nodemon": "^3.0.3",
-    "supertest": "^7.0.0"
+    "supertest": "^7.1.0"
   }
 }

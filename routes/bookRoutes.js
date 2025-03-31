@@ -7,31 +7,36 @@ const router = express.Router();
 const { authorizeRole } = require('../middleware/auth');
 const upload = require('../middleware/multer');
 
+/**
+ * @route GET /
+ * @description Health check route for the books API
+ * @access Member, Librarian
+ */
 router.get('/', authorizeRole(['Member', 'Librarian']), (req, res) => {
-  // Ensure no other response is sent before returning
   try {
-    // Some logic
-    res.sendStatus(200); // Properly sending a status response
+    res.sendStatus(200); // Send 200 OK status if the service is running
   } catch (error) {
-    // Handling error and sending a response only once
     console.error('Error:', error);
     if (!res.headersSent) {
-      // Ensure headers are not already sent
       res.status(500).send('Internal Server Error');
     }
   }
 });
 
-//get all books in the library with pagination
+/**
+ * @route POST /list
+ * @description Get all books in the library with pagination
+ * @access Member, Librarian
+ */
 router.post('/list', authorizeRole(['Member', 'Librarian']), async (req, res) => {
   try {
-    const { limit, offset } = req.body; // Expect `limit` and `offset` from the request body
+    const { limit, offset } = req.body;
 
-    // Default values if not provided
-    const rowsLimit = limit || 10; // Default to 10 rows if no limit is provided
-    const rowsOffset = offset || 0; // Default to 0 if no offset is provided
+    // Set default values if limit or offset is not provided
+    const rowsLimit = limit || 10;
+    const rowsOffset = offset || 0;
 
-    // Query to fetch books with LIMIT and OFFSET
+    // Query database to retrieve books with pagination
     const [books] = await req.app.locals.db.query('SELECT * FROM book LIMIT ? OFFSET ?', [
       rowsLimit,
       rowsOffset,
@@ -44,56 +49,62 @@ router.post('/list', authorizeRole(['Member', 'Librarian']), async (req, res) =>
     });
   } catch (error) {
     console.error('Error fetching books:', error);
-
     if (!res.headersSent) {
       res.status(500).json({ action: false, message: 'Internal Server Error' });
     }
   }
 });
 
-//get specific book by id
+/**
+ * @route POST /one
+ * @description Get a specific book by its ID
+ * @access Member, Librarian
+ */
 router.post('/one', authorizeRole(['Member', 'Librarian']), async (req, res) => {
   try {
-    const { book_id } = req.body; // Expect `book_id` from the request body
+    const { book_id } = req.body;
 
     if (!book_id) {
-      return res.status(400).json({ message: 'Book ID is required' }); // Bad Request if no book_id is provided
+      return res.status(400).json({ message: 'Book ID is required' });
     }
 
-    // Query to fetch a specific book based on its ID
+    // Fetch book details by ID
     const [books] = await req.app.locals.db.query('SELECT * FROM book WHERE book_id = ?', [
       book_id,
     ]);
 
     if (books.length === 0) {
-      return res.status(404).json({ message: 'Book not found' }); // Not Found if no book matches the given ID
+      return res.status(404).json({ message: 'Book not found' });
     }
 
     res.status(200).json({
       message: 'Book retrieved successfully',
-      data: books[0], // Return the first (and only) book object
+      data: books[0], // Return the first matching book
     });
   } catch (error) {
     console.error('Error fetching the book:', error);
-
     if (!res.headersSent) {
       res.status(500).json({ message: 'Internal Server Error' });
     }
   }
 });
 
-//search for books by id, name, or description
+/**
+ * @route POST /search
+ * @description Search for books by ID, name, or description
+ * @access Member, Librarian
+ */
 router.post('/search', authorizeRole(['Member', 'Librarian']), async (req, res) => {
   try {
-    const { searchTerm } = req.body; // Get the search term from the request body
+    const { searchTerm } = req.body;
 
     if (!searchTerm) {
       return res.status(400).json({ message: 'Search term is required' });
     }
 
-    const searchQuery = `%${searchTerm}%`; // Use wildcard for partial matching
+    const searchQuery = `%${searchTerm}%`; // Wildcard for partial matching
 
-    // SQL query to search by ID, name, or description
+    // Query to search books using LIKE for partial matching
     const [books] = await req.app.locals.db.query(
       'SELECT * FROM book WHERE book_id LIKE ? OR book_name LIKE ? OR book_description LIKE ?',
       [searchQuery, searchQuery, searchQuery]
@@ -115,28 +126,34 @@ router.post('/search', authorizeRole(['Member', 'Librarian']), async (req, res) 
   }
 });
 
-// Add a new book (with image upload)
+/**
+ * @route POST /add
+ * @description Add a new book (with image upload)
+ * @access Member, Librarian
+ */
 router.post(
   '/add',
   authorizeRole(['Member', 'Librarian']),
-  upload.single('book_image'),
+  upload.single('book_image'), // Middleware to handle file uploads
   async (req, res) => {
     try {
       const { book_name, book_description, book_late_fee, book_condition, book_status } = req.body;
 
+      // Generate a unique book ID
       const book_id = Date.now() + Math.round(Math.random() * 1e9);
-      const book_image = req.file ? req.file.path : null; // Get uploaded image path
+      const book_image = req.file ? req.file.path : null; // Get the uploaded image path
 
       // Validate required fields
       if (!book_name || !book_description) {
         return res.status(400).json({ message: 'Name and description are required' });
       }
 
+      // Set default values for optional fields
       const defaultLateFee = book_late_fee || 0.0;
       const defaultCondition = book_condition || 'Good';
       const defaultStatus = '1';
 
-      // Insert new book into the database
+      // Insert new book record into the database
       await req.app.locals.db.query(
         'INSERT INTO book (book_id, book_name, book_description, book_late_fee, book_condition, book_status, book_image) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [
@@ -153,7 +170,6 @@ router.post(
       res.status(201).json({ message: 'Book added successfully' });
     } catch (error) {
       console.error('Error adding the book:', error);
-
       if (!res.headersSent) {
         res.status(500).json({ message: 'Internal Server Error' });
       }
@@ -161,16 +177,20 @@ router.post(
   }
 );
 
-//check if book is available for borrowing
+/**
+ * @route POST /check
+ * @description Check if a book is available for borrowing
+ * @access Member, Librarian
+ */
 router.post('/check', authorizeRole(['Member', 'Librarian']), async (req, res) => {
   try {
-    const { book_id } = req.body; // Get the book_id from the request body
+    const { book_id } = req.body;
 
     if (!book_id) {
       return res.status(400).json({ action: false, message: 'Book ID is required' });
     }
 
-    // Query to check if the book is available for borrowing
+    // Query the database to check if the book exists
     const [book] = await req.app.locals.db.query('SELECT * FROM book WHERE book_id = ?', [book_id]);
 
     if (book.length === 0) {
@@ -181,16 +201,20 @@ router.post('/check', authorizeRole(['Member', 'Librarian']), async (req, res) =
         .json({ action: false, message: 'Book is not available for borrowing' });
     }
 
-    //check if the book is currently borrowed
+    // Check if the book is currently borrowed
     const [borrowedBook] = await req.app.locals.db.query(
-      'SELECT * FROM transaction WHERE transaction_book_id = ? AND transaction_status = ? OR transaction_status = ?',
+      'SELECT * FROM transaction WHERE transaction_book_id = ? AND (transaction_status = ? OR transaction_status = ?)',
       [book_id, 'issued', 'due']
     );
 
-    res.status(200).json({ action: true, message: 'Book is available for borrowing', book , available: borrowedBook.length === 0 });
+    res.status(200).json({
+      action: true,
+      message: 'Book is available for borrowing',
+      book,
+      available: borrowedBook.length === 0, // True if the book is not currently borrowed
+    });
   } catch (error) {
     console.error('Error checking the book:', error);
-
     if (!res.headersSent) {
       res.status(500).json({ action: false, message: 'Internal Server Error' });
     }
