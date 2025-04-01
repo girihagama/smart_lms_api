@@ -21,7 +21,17 @@ const upload = require('./middleware/multer');
 const app = express();
 
 // Middleware setup
-app.use(cors());
+//allow requests from everywhere
+app.use(
+  cors({
+    origin: '*',
+    methods: ['GET', 'POST'],
+  })
+);
+
+// Increase JSON payload size limit (default is 1MB)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(bodyParser.json());
 
 // Serve static files from the 'uploads' directory

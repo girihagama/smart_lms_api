@@ -1,5 +1,7 @@
 const express = require('express');
 const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 
 const router = express.Router();
 
@@ -69,17 +71,23 @@ router.post('/one', authorizeRole(['Member', 'Librarian']), async (req, res) => 
     }
 
     // Fetch book details by ID
-    const [books] = await req.app.locals.db.query('SELECT * FROM book WHERE book_id = ?', [
-      book_id,
-    ]);
+    const [book] = await req.app.locals.db.query('SELECT * FROM book WHERE book_id = ?', [book_id]);
 
-    if (books.length === 0) {
+    if (book.length === 0) {
       return res.status(404).json({ message: 'Book not found' });
     }
 
+    // Format response
+    const formattedBooks = book.map((book) => ({
+      ...book,
+      book_image: !book.book_image
+        ? ''
+        : req.app.locals.fbrc.api_base_url + book.book_image.replace(/\\/g, '/'),
+    }));
+
     res.status(200).json({
       message: 'Book retrieved successfully',
-      data: books[0], // Return the first matching book
+      data: formattedBooks[0], // Return the first matching book
     });
   } catch (error) {
     console.error('Error fetching the book:', error);
@@ -131,29 +139,57 @@ router.post('/search', authorizeRole(['Member', 'Librarian']), async (req, res) 
  * @description Add a new book (with image upload)
  * @access Member, Librarian
  */
-router.post(
-  '/add',
-  authorizeRole(['Member', 'Librarian']),
-  upload.single('book_image'), // Middleware to handle file uploads
-  async (req, res) => {
-    try {
-      const { book_name, book_description, book_late_fee, book_condition, book_status } = req.body;
+router.post('/add', authorizeRole(['Librarian']), async (req, res) => {
+  try {
+    const {
+      isNew,
+      book_id = Date.now() + Math.round(Math.random() * 1e9),
+      book_name,
+      book_description,
+      book_late_fee,
+      book_condition,
+      book_status,
+      book_image, // Base64 image (optional)
+    } = req.body;
 
-      // Generate a unique book ID
-      const book_id = Date.now() + Math.round(Math.random() * 1e9);
-      const book_image = req.file ? req.file.path : null; // Get the uploaded image path
+    const isUpdating = !isNew; // Check if it's an update
 
-      // Validate required fields
-      if (!book_name || !book_description) {
-        return res.status(400).json({ message: 'Name and description are required' });
-      }
+    let imagePath = null;
+    if (book_image && book_image.length > 0) {
+      const base64Data = book_image.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      const fileName = `${book_id}.jpg`;
+      const uploadPath = path.join(__dirname, '../uploads', fileName);
 
-      // Set default values for optional fields
-      const defaultLateFee = book_late_fee || 0.0;
-      const defaultCondition = book_condition || 'Good';
-      const defaultStatus = '1';
+      fs.writeFileSync(uploadPath, buffer); // Save the file
+      imagePath = `uploads/${fileName}`; // Store path in DB
+    }
 
-      // Insert new book record into the database
+    if (!book_name || !book_description) {
+      return res.status(400).json({ message: 'Name and description are required' });
+    }
+
+    const defaultLateFee = book_late_fee || 0.0;
+    const defaultCondition = book_condition || 'Good';
+    const defaultStatus = book_status || '1';
+
+    if (isUpdating) {
+      // Update existing book
+      await req.app.locals.db.query(
+        'UPDATE book SET book_name = ?, book_description = ?, book_late_fee = ?, book_condition = ?, book_status = ?, book_image = ? WHERE book_id = ?',
+        [
+          book_name,
+          book_description,
+          defaultLateFee,
+          defaultCondition,
+          defaultStatus,
+          imagePath,
+          book_id,
+        ]
+      );
+      return res.status(200).json({ message: 'Book updated successfully' });
+    } else {
+      // Insert new book
       await req.app.locals.db.query(
         'INSERT INTO book (book_id, book_name, book_description, book_late_fee, book_condition, book_status, book_image) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [
@@ -163,19 +199,18 @@ router.post(
           defaultLateFee,
           defaultCondition,
           defaultStatus,
-          book_image,
+          imagePath,
         ]
       );
-
-      res.status(201).json({ message: 'Book added successfully' });
-    } catch (error) {
-      console.error('Error adding the book:', error);
-      if (!res.headersSent) {
-        res.status(500).json({ message: 'Internal Server Error' });
-      }
+      return res.status(201).json({ message: 'Book added successfully' });
+    }
+  } catch (error) {
+    console.error('Error processing book:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Internal Server Error' });
     }
   }
-);
+});
 
 /**
  * @route POST /check
