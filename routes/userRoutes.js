@@ -195,4 +195,76 @@ router.post('/device', authorizeRole(['Member']), async (req, res) => {
   }
 });
 
+router.post('/search', authorizeRole(['Librarian']), async (req, res) => {
+  try {
+    const { searchTerm, page = 1, limit = 10 } = req.body;
+    const offset = (page - 1) * limit;
+
+    let query, countQuery, queryParams;
+
+    const searchQuery = `%${searchTerm}%`; // Wildcard for partial matching
+
+    if (searchTerm) {
+      const searchQuery = `%${searchTerm}%`; // Wildcard for partial matching
+
+      query = `
+    SELECT * FROM user 
+    WHERE user_email LIKE ? OR user_name LIKE ? OR user_mobile LIKE ? OR user_address LIKE ? 
+    ORDER BY user_registration_date DESC 
+    LIMIT ? OFFSET ?`;
+
+      countQuery = `
+    SELECT COUNT(*) AS totalUsers 
+    FROM user 
+    WHERE user_email LIKE ? OR user_name LIKE ? OR user_mobile LIKE ? OR user_address LIKE ?`;
+
+      queryParams = [
+        searchQuery,
+        searchQuery,
+        searchQuery,
+        searchQuery,
+        Number(limit),
+        Number(offset),
+      ];
+      countParams = [searchQuery, searchQuery, searchQuery, searchQuery]; // Separate params for count query
+    } else {
+      query = `SELECT * FROM user ORDER BY user_registration_date DESC LIMIT ? OFFSET ?`;
+      countQuery = `SELECT COUNT(*) AS totalUsers FROM user`;
+      queryParams = [Number(limit), Number(offset)];
+      countParams = []; // No params needed for count query
+    }
+
+    // Get total user count
+    const [[{ totalUsers }]] = await req.app.locals.db.query(countQuery, countParams);
+
+    // Fetch users
+    const [users] = await req.app.locals.db.query(query, queryParams);
+
+    // Format response to exclude sensitive data
+    const formattedUsers = users.map(
+      ({ user_password, user_otp, user_otp_expire, user_device_id, ...safeUser }) => safeUser
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ message: 'No users found' });
+    }
+
+    res.status(200).json({
+      message: 'Users retrieved successfully',
+      data: formattedUsers,
+      pagination: {
+        totalUsers,
+        currentPage: Number(page),
+        totalPages: Math.ceil(totalUsers / limit),
+        perPage: Number(limit),
+      },
+    });
+  } catch (error) {
+    console.error('Error searching for users:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Internal Server Error' });
+    }
+  }
+});
+
 module.exports = router;

@@ -188,5 +188,165 @@ router.post('/history', authorizeRole(['Member', 'Librarian']), async (req, res)
   }
 });
 
+//get list of books that are currently borrowed by a member
+router.post('/borrowed', authorizeRole(['Member', 'Librarian']), async (req, res) => {
+  try {
+    const user_email = req.user.user_email;
+    const { user_id = user_email } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({ action: false, message: 'User ID is required' });
+    }
+
+    // Query to fetch borrowed books by a specific user join the book table
+    const [borrowedBooks] = await req.app.locals.db.query(
+      'SELECT * FROM transaction JOIN book ON transaction.transaction_book_id = book.book_id WHERE transaction_user_email = ? AND (transaction_status = ? OR transaction_status = ?)',
+      [user_id, 'issued', 'due']
+    );
+
+    if (borrowedBooks.length === 0) {
+      return res
+        .status(404)
+        .json({ action: false, message: ['No borrowed books found for the user'], data: [] });
+    }
+
+    // Map and assign the result
+    const updatedBooks = borrowedBooks.map((txn) => ({
+      ...txn,
+      book_image: req.app.locals.fbrc.api_base_url + txn.book_image.replace(/\\/g, '/'),
+      transaction_return: 'return ' + dayjs(txn.transaction_return_date).fromNow(),
+    }));
+
+    res.status(200).json({
+      action: true,
+      message: 'Borrowed books retrieved successfully',
+      data: updatedBooks,
+    });
+  } catch (error) {
+    console.error('Error fetching borrowed books:', error);
+
+    if (!res.headersSent) {
+      res.status(500).json({ action: false, message: 'Internal Server Error' });
+    }
+  }
+});
+
+//get list of all books borrwed by the member
+router.post('/fined', authorizeRole(['Member', 'Librarian']), async (req, res) => {
+  try {
+    const user_email = req.user.user_email;
+    //add page and limit
+    const { page = 1, limit = 10, user_id = user_email } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({ action: false, message: 'User ID is required' });
+    }
+
+    // Query to fetch fined transaction by a specific user join the book table
+    const [totalBooks] = await req.app.locals.db.query(
+      'SELECT count(*) AS total FROM transaction JOIN book ON transaction.transaction_book_id = book.book_id WHERE transaction_user_email = ? AND (transaction_status = ? OR transaction_status = ?) AND transaction_late_days > 0 ORDER BY transaction_borrow_date DESC',
+      [user_id, 'returned', 'due']
+    );
+    const [finedBooks] = await req.app.locals.db.query(
+      'SELECT * FROM transaction JOIN book ON transaction.transaction_book_id = book.book_id WHERE transaction_user_email = ? AND (transaction_status = ? OR transaction_status = ?) AND transaction_late_days > 0 ORDER BY transaction_borrow_date DESC LIMIT ? OFFSET ?',
+      [user_id, 'returned', 'due', limit, (page - 1) * limit]
+    );
+
+    // Modify the results to include a concatenated field
+    const formattedBooks = finedBooks.map((book) => ({
+      ...book,
+      book_image: req.app.locals.fbrc.api_base_url + book.book_image.replace(/\\/g, '/'),
+      transaction_return: 'return ' + dayjs(book.transaction_return_date).fromNow(),
+    }));
+
+    if (finedBooks.length === 0) {
+      return res.status(404).json({
+        action: false,
+        message: ['No fined books found for the user'],
+        data: [],
+        pagination: {
+          total: totalBooks[0].total,
+          limit: limit,
+          page: page,
+          pages: Math.ceil(finedBooks.length / limit),
+        },
+      });
+    }
+
+    res.status(200).json({
+      action: true,
+      message: 'Fined books retrieved successfully',
+      data: formattedBooks,
+      pagination: {
+        total: totalBooks[0].total,
+        limit: limit,
+        page: page,
+        pages: Math.ceil(finedBooks.length / limit),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching fined books:', error);
+
+    if (!res.headersSent) {
+      res.status(500).json({ action: false, message: 'Internal Server Error' });
+    }
+  }
+});
+
+//add transaction rating
+router.post('/rate', authorizeRole(['Member']), async (req, res) => {
+  try {
+    const { transaction_id, rating } = req.body;
+    const user_id = req.user.user_email;
+
+    if (!transaction_id || !rating) {
+      return res
+        .status(400)
+        .json({ action: false, message: 'Transaction ID and Rating are required' });
+    }
+
+    // Check if the transaction exists
+    const [transaction] = await req.app.locals.db.query(
+      'SELECT * FROM transaction WHERE transaction_id = ?',
+      [transaction_id]
+    );
+
+    if (transaction.length === 0) {
+      return res.status(404).json({ action: false, message: 'Transaction not found' });
+    }
+
+    // Check if the transaction is already rated
+    if (transaction[0].transaction_rating !== null) {
+      return res.status(400).json({ action: false, message: 'Transaction is already rated' });
+    }
+
+    //rating cannot be added after 1month from return date
+    const returnDate = new Date(transaction[0].transaction_return_date);
+    const currentDate = new Date();
+    const diffTime = Math.abs(currentDate - returnDate);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays > 30) {
+      return res
+        .status(400)
+        .json({ action: false, message: 'Rating cannot be added after 30 days from return date' });
+    }
+
+    // Update the transaction with the rating
+    await req.app.locals.db.query(
+      'UPDATE transaction SET transaction_rating = ? WHERE transaction_id = ? AND transaction_user_email = ?',
+      [rating, transaction_id, user_id]
+    );
+
+    res.status(200).json({ action: true, message: 'Transaction rated successfully' });
+  } catch (error) {
+    console.error('Error rating transaction:', error);
+
+    if (!res.headersSent) {
+      res.status(500).json({ action: false, message: 'Internal Server Error' });
+    }
+  }
+});
+
 // Export the router
 module.exports = router;

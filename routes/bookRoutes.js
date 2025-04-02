@@ -104,27 +104,61 @@ router.post('/one', authorizeRole(['Member', 'Librarian']), async (req, res) => 
  */
 router.post('/search', authorizeRole(['Member', 'Librarian']), async (req, res) => {
   try {
-    const { searchTerm } = req.body;
+    const { searchTerm, page = 1, limit = 10 } = req.body;
+    const offset = (page - 1) * limit;
 
-    if (!searchTerm) {
-      return res.status(400).json({ message: 'Search term is required' });
-    }
+    let query, countQuery, queryParams;
 
     const searchQuery = `%${searchTerm}%`; // Wildcard for partial matching
 
-    // Query to search books using LIKE for partial matching
-    const [books] = await req.app.locals.db.query(
-      'SELECT * FROM book WHERE book_id LIKE ? OR book_name LIKE ? OR book_description LIKE ?',
-      [searchQuery, searchQuery, searchQuery]
-    );
+    if (searchTerm) {
+      query = `
+        SELECT * FROM book 
+        WHERE book_id LIKE ? OR book_name LIKE ? OR book_description LIKE ? 
+        ORDER BY book_id DESC 
+        LIMIT ? OFFSET ?`;
+
+      countQuery = `
+        SELECT COUNT(*) AS totalBooks 
+        FROM book 
+        WHERE book_id LIKE ? OR book_name LIKE ? OR book_description LIKE ?`;
+
+      queryParams = [searchQuery, searchQuery, searchQuery, Number(limit), Number(offset)];
+    } else {
+      query = `SELECT * FROM book ORDER BY book_id DESC LIMIT ? OFFSET ?`; // Latest books
+      countQuery = `SELECT COUNT(*) AS totalBooks FROM book`;
+      queryParams = [Number(limit), Number(offset)];
+    }
+
+    // Get total book count
+    const [[{ totalBooks }]] = searchTerm
+      ? await req.app.locals.db.query(countQuery, [searchQuery, searchQuery, searchQuery])
+      : await req.app.locals.db.query(countQuery);
+
+    // Fetch books
+    const [books] = await req.app.locals.db.query(query, queryParams);
+
+    // Format response
+    const formattedBooks = books.map((book) => ({
+      ...book,
+      book_image: !book.book_image
+        ? ''
+        : req.app.locals.fbrc.api_base_url + book.book_image.replace(/\\/g, '/'),
+    }));
 
     if (books.length === 0) {
-      return res.status(404).json({ message: 'No books found matching the search term' });
+      return res.status(404).json({ message: 'No books found' });
     }
 
     res.status(200).json({
       message: 'Books retrieved successfully',
-      data: books,
+      data: formattedBooks,
+      pagination: {
+        totalBooks,
+        currentPage: Number(page),
+        totalPages: Math.ceil(totalBooks / limit),
+        perPage: Number(limit),
+      },
     });
   } catch (error) {
     console.error('Error searching for books:', error);
@@ -163,6 +197,9 @@ router.post('/add', authorizeRole(['Librarian']), async (req, res) => {
 
       fs.writeFileSync(uploadPath, buffer); // Save the file
       imagePath = `uploads/${fileName}`; // Store path in DB
+    } else {
+      const fileName = `${book_id}.jpg`;
+      imagePath = `uploads/${fileName}`;
     }
 
     if (!book_name || !book_description) {
