@@ -25,6 +25,21 @@ router.get('/', authorizeRole(['Member', 'Librarian']), (req, res) => {
   }
 });
 
+router.post('/get-total', authorizeRole(['Librarian']), async (req, res) => {
+  try {
+    const [total] = await req.app.locals.db.query(
+      'SELECT Count(*) AS total FROM book WHERE book_status = ?',
+      ['1']
+    );
+    res.json({ message: 'OK', total: total[0].total }); // Send 200 OK status if the service is running
+  } catch (error) {
+    console.error('Error:', error);
+    if (!res.headersSent) {
+      res.status(500).send('Internal Server Error');
+    }
+  }
+});
+
 /**
  * @route POST /list
  * @description Get all books in the library with pagination

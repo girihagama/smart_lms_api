@@ -16,10 +16,25 @@ router.get('/', authorizeRole(['Member', 'Librarian']), (req, res) => {
   }
 });
 
+router.post('/get-total', authorizeRole(['Librarian']), async (req, res) => {
+  try {
+    const [total] = await req.app.locals.db.query(
+      'SELECT Count(*) AS total FROM user WHERE user_status = ?',
+      ['1']
+    );
+    res.json({ message: 'OK', total: total[0].total }); // Send 200 OK status if the service is running
+  } catch (error) {
+    console.error('Error:', error);
+    if (!res.headersSent) {
+      res.status(500).send('Internal Server Error');
+    }
+  }
+});
+
 // Endpoint to register and invite a new user through the librarian dashboard
 router.post('/register', authorizeRole(['Librarian']), async (req, res) => {
   try {
-    const { email, name, mobile, address, dob, role } = req.body;
+    const { email, name, mobile, address, dob, role, max_books = 2 } = req.body;
 
     // Validate that all required fields are present
     if (!email || !name || !mobile || !address || !dob || !role) {
@@ -38,7 +53,7 @@ router.post('/register', authorizeRole(['Librarian']), async (req, res) => {
     // Insert new user with inactive status (status = 2)
     await req.app.locals.db.query(
       'INSERT INTO user (user_email, user_name, user_mobile, user_address, user_dob, user_role, user_status, user_max_books) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [email, name, mobile, address, dob, role, '2', role === 'Member' ? 2 : 0]
+      [email, name, mobile, address, dob, role, role === 'Member' ? max_books : 0]
     );
 
     // Generate a 6-digit OTP for account activation
@@ -103,6 +118,84 @@ router.post('/register', authorizeRole(['Librarian']), async (req, res) => {
     res.json({ action: true, message: 'User registered and invitation email sent successfully' });
   } catch (error) {
     console.error(error);
+    res.status(500).json({ action: false, message: 'Server error' });
+  }
+});
+
+//update user details
+router.post('/update', authorizeRole(['Librarian']), async (req, res) => {
+  try {
+    const { email, name, mobile, address, dob, role, status, max_books } = req.body;
+
+    // Validate that the required fields are present
+    if (!email) {
+      return res.status(400).json({ action: false, message: 'Email is required' });
+    }
+
+    // Fetch the existing user
+    const [existingUser] = await req.app.locals.db.query(
+      'SELECT * FROM user WHERE user_email = ?',
+      [email]
+    );
+
+    if (existingUser.length === 0) {
+      return res.status(404).json({ action: false, message: 'User not found' });
+    }
+
+    // Prepare the update query
+    const updateFields = [];
+    const updateValues = [];
+
+    if (name) {
+      updateFields.push('user_name = ?');
+      updateValues.push(name);
+    }
+
+    if (mobile) {
+      updateFields.push('user_mobile = ?');
+      updateValues.push(mobile);
+    }
+
+    if (address) {
+      updateFields.push('user_address = ?');
+      updateValues.push(address);
+    }
+
+    if (dob) {
+      updateFields.push('user_dob = ?');
+      updateValues.push(dob);
+    }
+
+    if (role) {
+      updateFields.push('user_role = ?');
+      updateValues.push(role);
+    }
+
+    if (status !== undefined) {
+      updateFields.push('user_status = ?');
+      updateValues.push(status);
+    }
+
+    if (max_books !== undefined) {
+      updateFields.push('user_max_books = ?');
+      updateValues.push(role === 'Librarian' ? 0 : max_books);
+    }
+
+    // Ensure at least one field is updated
+    if (updateFields.length === 0) {
+      return res.status(400).json({ action: false, message: 'No fields to update' });
+    }
+
+    // Add the email as the last parameter for the query (to identify which user to update)
+    updateValues.push(email);
+
+    // Execute the update query
+    const updateQuery = `UPDATE user SET ${updateFields.join(', ')} WHERE user_email = ?`;
+    await req.app.locals.db.query(updateQuery, updateValues);
+
+    res.status(200).json({ action: true, message: 'User updated successfully' });
+  } catch (error) {
+    console.error('Error updating user:', error);
     res.status(500).json({ action: false, message: 'Server error' });
   }
 });

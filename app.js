@@ -145,13 +145,66 @@ let db = null;
     };
 
     // Function to send due reminders via push notifications and email
-    const sendDueNotification = () => {
-      console.log('Running sendDueNotification at', new Date().toLocaleString());
-      // TODO: Implement Firebase push notifications for users with upcoming due dates
+    const sendDueNotification = async () => {
+      const days = 7;
+      try {
+        console.log('Running sendDueNotification at', new Date().toLocaleString());
+
+        // Step 1: Fetch all due transactions along with user details, considering the days parameter
+        const query = `
+      SELECT t.transaction_id, b.book_name, u.user_email, u.user_device_id, t.transaction_return_date
+      FROM transaction t
+      JOIN view_fcm_tokens u ON t.transaction_user_email = u.user_email
+      JOIN book b ON t.transaction_book_id = b.book_id
+      WHERE t.transaction_status = 'Issued'
+      AND t.transaction_return_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY);
+    `;
+
+        const [dueTransactions] = await db.query(query, [days]);
+
+        if (dueTransactions.length === 0) {
+          console.log(`No due transactions found for ${days} day(s)`);
+          return { message: `No due transactions found for ${days} day(s)` };
+        }
+
+        let notificationsSent = 0;
+
+        // Step 2: Send notifications for each due transaction
+        for (const transaction of dueTransactions) {
+          const { transaction_id, book_name, user_email, user_device_id } = transaction;
+
+          if (!user_device_id) {
+            console.warn(`Skipping user ${user_email} (No device ID)`);
+            continue; // Skip if no device ID
+          }
+
+          const firebaseMessage = {
+            token: user_device_id,
+            notification: {
+              title: `Smart Library Return Reminder for ${book_name}`,
+              body: `Your book "${book_name}" (Transaction ID: ${transaction_id}) is due in a few days. Please return it on time to avoid late charges.`,
+            },
+          };
+
+          try {
+            await admin.messaging().send(firebaseMessage);
+            console.log(`FCM notification sent to ${user_email} for "${book_name}"`);
+            notificationsSent++;
+          } catch (error) {
+            console.error(`Error sending FCM notification to ${user_email}:`, error);
+          }
+        }
+
+        // Return status of notifications sent
+        return { message: `${notificationsSent} notifications sent successfully.` };
+      } catch (error) {
+        console.error('Error in sendDueNotification:', error);
+        throw new Error('Internal server error while sending due notifications.');
+      }
     };
 
     // Schedule cron jobs
-    cron.schedule('0 6,12,18 * * *', sendDueNotification); // Runs at 6 AM, 12 PM, and 6 PM
+    cron.schedule('0 12,18 * * *', sendDueNotification); // Runs at 12 PM, and 6 PM
     cron.schedule('0 6,12,18 * * *', updateFees); // Runs at 6 AM, 12 PM, and 6 PM
     cron.schedule('* * * * *', updateDue); // Runs every minute
     console.log('✅ Cron jobs scheduled successfully');
