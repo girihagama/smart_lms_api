@@ -294,10 +294,18 @@ router.post('/check', authorizeRole(['Member', 'Librarian']), async (req, res) =
       [book_id, 'issued', 'due']
     );
 
+    // Format response
+    const formattedBooks = book.map((book) => ({
+      ...book,
+      book_image: !book.book_image
+        ? ''
+        : req.app.locals.fbrc.api_base_url + book.book_image.replace(/\\/g, '/'),
+    }));
+
     res.status(200).json({
       action: true,
       message: 'Book is available for borrowing',
-      book,
+      book: formattedBooks,
       available: borrowedBook.length === 0, // True if the book is not currently borrowed
     });
   } catch (error) {
